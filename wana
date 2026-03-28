@@ -4,47 +4,170 @@
 AFTER=""
 BEFORE=""
 IP=""
-URI=""
+export URI=""
 CMD=""
 LOGS=""
+
+add_after() {
+  if [[ -z $AFTER ]]; then
+    AFTER="$1"
+  else
+    if [ "$1" \> "$AFTER" ]; then
+      AFTER=$1
+    fi
+  fi
+}
+
+add_before() {
+  if [[ -z $BEFORE ]]; then
+    BEFORE="$1"
+  else
+    if [ "$1" \< "$BEFORE" ]; then
+      BEFORE=$1
+    fi
+  fi
+}
 
 read_file() {
   if [[ -z "$LOGS" ]]; then
     cat
   else
     for log in $LOGS; do
-      case "$log" in
-        *.gz) gzip -dc "$log" ;;
-        *) cat "$log" ;;
-      esac
+      zcat -f "$log"
     done
   fi
+}
+
+format() {
+  if [[ "$CMD" == list-ip ]]; then
+    sort
+  elif [[ "$CMD" == list-hosts ]]; then
+    sort | get_hosts
+  elif [[ "$CMD" == list-uri ]]; then
+    sort
+  elif [[ "$CMD" == hist-ip ]]; then
+    sort -t '(' -k 2 -nr
+  elif [[ "$CMD" == hist-load ]]; then
+    sort
+  else
+    cat
+  fi
+}
+
+get_hosts() {
+  while read -r IP; do
+    HOST=$(host "$IP" 2>/dev/null | awk '/domain name pointer/ {print $NF}')
+
+    if [[ -z "$HOST" ]]; then
+      echo "$IP"
+    else
+      echo "$HOST"
+    fi
+  done
+}
+
+
+
+filter() {
+  awk \
+  -v after="$AFTER" \
+  -v before="$BEFORE" \
+  -v ip="$IP" \
+  -v cmd="$CMD" \
+  '
+  BEGIN {
+  m["Jan"]="01"; m["Feb"]="02"; m["Mar"]="03"; m["Apr"]="04";
+  m["May"]="05"; m["Jun"]="06"; m["Jul"]="07"; m["Aug"]="08";
+  m["Sep"]="09"; m["Oct"]="10"; m["Nov"]="11"; m["Dec"]="12";
+
+  uri = ENVIRON["URI"]
+  }
+
+  {
+  YYYY = substr($4, 9, 4)
+  MM = m[substr($4, 5, 3)]
+  DD = substr($4, 2, 2)
+  time = substr($4, 14, 8)
+
+  date_time = YYYY "-" MM "-" DD " " time
+
+  if ( \
+    (after != "" && (date_time <= after)) || \
+    (before != "" && (date_time >= before)) || \
+    (ip != "" && ($1 != ip)) || \
+    (uri != "" && ($7 !~ uri)) \
+  ) next
+
+  if (cmd == "") {
+    print $0
+  } else if (cmd == "list-ip" || cmd == "list-hosts" || cmd == "hist-ip") {
+    ip_list[$1]++
+  } else if (cmd == "list-uri") {
+    if ($6 ~ /^"[A-Z]+/) uri_list[$7]++
+  } else if (cmd == "hist-load") {
+    load_hist[substr(date_time, 1, 13) ":00"]++
+  } else {
+    print $0
+  }
+
+  }
+
+  END {
+  if (cmd != "") {
+    if (cmd == "list-ip" || cmd == "list-hosts") {
+      for (ip in ip_list) {
+        print ip
+      }
+    } else if (cmd == "list-uri") {
+      for (uri in uri_list) {
+        print uri
+      }
+    } else if (cmd == "hist-ip") {
+      for (ip in ip_list) {
+        printf "%s (%d): ", ip, ip_list[ip]
+        for (i = 0; i < ip_list[ip]; i++) {
+          printf "#"
+        }
+        printf "\n"
+      }
+    } else if (cmd == "hist-load") {
+      for (interval in load_hist) {
+        printf "%s (%d): ", interval, load_hist[interval]
+        for (i = 0; i < load_hist[interval]; i++) {
+          printf "#"
+        }
+        printf "\n"
+      }
+    }
+  }
+  }
+  '
 }
 
 
 while [[ $# -gt 0 ]]; do
   case "$1" in      
     -a)
-      AFTER="$2"
+      add_after "$2"
       shift 2
       ;;
     -b)
-      BEFORE="$2"
+      add_before "$2"
       shift 2
       ;;
     -ip)
-      IP="$2"
+      IP="${IP}$2"
       shift 2
       ;;
     -uri)
-      URI="$2"
+      URI+="${URI}$2"
       shift 2
       ;;
     list-ip|list-hosts|list-uri|hist-ip|hist-load)
-      if [[ -n "$COMMAND" ]]; then
-        echo "Error: Cannot have multiple commands: '$COMMAND' and '$1'" >&2
+      if [[ -n "$CMD" ]]; then
+        echo "Error: Cannot have multiple CMDs: '$CMD' and '$1'" >&2
       fi 
-      COMMAND="$1"
+      CMD="$1"
       shift 1
       ;;
     -*)
@@ -56,13 +179,11 @@ while [[ $# -gt 0 ]]; do
         LOGS="$LOGS $1"
         shift 1
       else
-        echo "Error: '$1' is neither valid command or existing file." >&2
+        echo "Error: '$1' is neither valid CMD or existing file." >&2
         exit 1
       fi
       ;;
   esac
 done
 
-echo "All logs: ${LOGS[@]}"
-
-read_file >&1
+read_file | filter | format
