@@ -33,7 +33,11 @@ read_file() {
     cat
   else
     for log in $LOGS; do
-      zcat -f "$log"
+      if [[ "$log" == *.gz ]]; then
+        gzip -cd "$log"
+      else
+        cat "$log"
+      fi
     done
   fi
 }
@@ -56,7 +60,7 @@ format() {
 
 get_hosts() {
   while read -r IP; do
-    HOST=$(host "$IP" 2>/dev/null | awk '/domain name pointer/ {print $NF}')
+    HOST=$(host "$IP" 2>/dev/null | awk '/domain name pointer/ {print $NF; exit}')
 
     if [[ -z "$HOST" ]]; then
       echo "$IP"
@@ -160,7 +164,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -uri)
-      URI+="${URI}$2"
+      URI="${URI}$2"
       shift 2
       ;;
     list-ip|list-hosts|list-uri|hist-ip|hist-load)
