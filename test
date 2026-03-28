@@ -1,0 +1,32 @@
+#!/bin/bash
+
+
+run_tests() {
+
+printf "./wana list-ip ios-example.com.access.log\n"
+./wana list-ip ios-example.com.access.log
+
+printf '\n./wana list-hosts ios-example.com.access.log\n'
+./wana list-hosts ios-example.com.access.log
+
+printf '\n./wana -a "2026-02-22 09:00:00" -b "2026-02-22 09:44:54" ios-example.com.access.log\n'
+./wana -a "2026-02-22 09:00:00" -b "2026-02-22 09:44:54" ios-example.com.access.log
+
+printf '\n./wana -a "2026-02-22 09:00:00" -b "2026-02-22 09:44:54" list-uri ios-example.com.access.log\n'
+./wana -a "2026-02-22 09:00:00" -b "2026-02-22 09:44:54" list-uri ios-example.com.access.log
+
+printf '\n./wana hist-ip ios-example.com.access.log\n'
+./wana hist-ip ios-example.com.access.log
+
+printf '\n./wana -ip 2001:67c:1220:808::93e5:8ad hist-load ios-example.com.access.log.1\n'
+./wana -ip 2001:67c:1220:808::93e5:8ad hist-load ios-example.com.access.log.1
+
+printf '\n./wana -uri "/robots\.txt" list-hosts *log*\n'
+./wana -uri "/robots\.txt" list-hosts *log*
+
+printf '\n./wana -uri "/robots\.txt" hist-load *log*\n'
+./wana -uri "/robots\.txt" hist-load *log*
+}
+
+run_tests > out.txt
+diff out.txt expected.txt
